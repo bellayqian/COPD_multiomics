@@ -1,0 +1,243 @@
+---
+title: "multiomics_COPD"
+output: html_document
+date: "2024-06-04"
+---
+This is to setup and load package.
+```{r setup, include=FALSE, warning=FALSE}
+library(Signac)
+library(Seurat)
+library(GenomeInfoDb)
+library(BiocGenerics)
+# BiocManager::install("EnsDb.Hsapiens.v86")
+library(EnsDb.Hsapiens.v86)
+library(ggplot2)
+library(dplyr)
+# library(biovizBase)
+library(clusterProfiler)
+# library(chromVAR)
+# library(JASPAR2020)
+# library(TFBSTools)
+# library(motifmatchr)
+# BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
+library(BSgenome.Hsapiens.UCSC.hg38)
+library(clusterProfiler)
+# BiocManager::install("org.Mm.eg.db")
+library(org.Mm.eg.db)
+# install.packages("hdf5r")
+# library(IRanges)
+# library(monocle3)
+set.seed(1234)
+```
+
+## Load RNA and ATAC data, all in./atac_fragments.tsv.gz
+
+```{r load, echo=FALSE, warning=FALSE}
+
+# setwd("/udd/reyqi/COPD")
+
+# counts <- Read10X_h5("/proj/rerefs/reref00/rna/whole/singlecell_lung/Rawlins/filtered_tf_bc_matrix.h5")
+# counts <- Read10X_h5("/proj/rerefs/reref00/rna/whole/singlecell_lung/Rawlins/data/raw/cellranger-atac200_count_5891STDY8038655_GRCh38-2020-A-2_0_0/filtered_peak_bc_matrix")
+# fragpath <- "./RData/fragments.tsv.gz"
+
+# create a Seurat object containing the RNA data
+# multi.Rawlins <- CreateSeuratObject(counts = counts, assay = "RNA")
+
+# get gene annotations for hg38
+# annotation <- GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v86)
+# seqlevelsStyle(annotation) <- "UCSC"
+# genome(annotation) <- "hg38"
+# saveRDS(annotation, "./RData/annotation.rds")
+# annotation <- readRDS("./RData/annotation.rds")
+
+# create ATAC assay and add it to the object
+# counts_atac <- Read10X_h5("/proj/rerefs/reref00/rna/whole/singlecell_lung/Rawlins/filtered_peak_bc_matrix.h5")
+# counts_atac <- Read10X_h5("/proj/rerefs/reref00/rna/whole/singlecell_lung/Rawlins/data/raw/cellranger-atac200_count_5891STDY8038655_GRCh38-2020-A-2_0_0/filtered_tf_bc_matrix")
+# 
+# multi.Rawlins[["ATAC"]] <- CreateChromatinAssay(counts = counts_atac, sep = c(":", "-"), fragments = fragpath, annotation = annotation)
+# multi.Rawlins
+
+# saveRDS(multi.Rawlins, "./RData/multi.Rawlins_orig.rds")
+# multi.Rawlins <- readRDS("./RData/multi.Rawlins_orig.rds")
+
+# Quality Control
+# change defaultAssay from RNA to ATAC
+# DefaultAssay(multi.Rawlins) <- "ATAC"
+
+# Quality control
+# multi.Rawlins <- NucleosomeSignal(multi.Rawlins)
+# multi.Rawlins <- TSSEnrichment(multi.Rawlins)
+
+# saveRDS(multi.Rawlins, "./RData/multi.Rawlins_2.rds")
+# multi.Rawlins <- readRDS("/udd/reyqi/RData/multi.Rawlins_2.rds")
+
+# filter out low quality cells
+# multi.Rawlins <- subset(
+#   x = multi.Rawlins,
+#   subset = nCount_RNA < 750000 &
+#     nCount_RNA > 1000 &
+#     nCount_ATAC > 1000 &
+#     nCount_ATAC < 150000 &
+#     nucleosome_signal < 5 &
+#     TSS.enrichment > 1 & 
+#     TSS.enrichment < 12
+# )
+```
+
+This is the QC part, we remove some extreme values.
+```{r QC, warning=FALSE}
+# QC
+# saveRDS(multi.Rawlins, "./RData/multi.Rawlins_3.rds")
+multi.Rawlins <- readRDS("/udd/reyqi/RData/multi.Rawlins_3.rds")
+
+VlnPlot(object = multi.Rawlins,
+  features = c("nCount_RNA", "nCount_ATAC", "TSS.enrichment", "nucleosome_signal"),
+  ncol = 4,
+  pt.size = 0
+)
+
+## Gene expression data processing
+# Joint UMAP visualization
+# build a joint neighbor graph using both assays
+# RNA analysis
+DefaultAssay(multi.Rawlins) <- "RNA"
+multi.Rawlins <- NormalizeData(multi.Rawlins)
+multi.Rawlins <- FindVariableFeatures(multi.Rawlins, selection.method = "vst")
+multi.Rawlins <- ScaleData(multi.Rawlins, features = rownames(multi.Rawlins))
+multi.Rawlins <- RunPCA(multi.Rawlins, features = VariableFeatures(multi.Rawlins))
+multi.Rawlins <- RunUMAP(multi.Rawlins, dims = 1:50, reduction.name = 'umap.rna', reduction.key = 'rnaUMAP_')
+# DimHeatmap(multi.Rawlins, dims = c(8, 10))
+# saveRDS(multi.Rawlins, "./RData/multi.Rawlins_4.rds")
+multi.Rawlins <- readRDS("/udd/reyqi/RData/multi.Rawlins_4.rds")
+# Download multi.Rawlins_4.rds from cloud service
+
+```
+
+# ATAC analysis
+# We exclude the first dimension as this is typically correlated with sequencing depth
+# install.packages("Matrix", type = "source")
+# install.packages("irlba", type = "source")
+# We exclude the first dimension as this is typically correlated with sequencing depth
+
+```{r atac_analysis, warning=FALSE}
+
+# DefaultAssay(multi.Rawlins) <- "ATAC"
+# multi.Rawlins <- RunTFIDF(multi.Rawlins)
+# multi.Rawlins <- FindTopFeatures(multi.Rawlins, min.cutoff = 'q0')
+# multi.Rawlins <- RunSVD(multi.Rawlins)
+# multi.Rawlins <- RunUMAP(multi.Rawlins, reduction = 'lsi', dims = 2:50, reduction.name = "umap.atac", reduction.key = "atacUMAP_")
+# multi.Rawlins <- FindMultiModalNeighbors(object = multi.Rawlins,reduction.list = list("pca", "lsi"), dims.list = list(1:50, 2:50))
+# multi.Rawlins <- RunUMAP(multi.Rawlins, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+# multi.Rawlins <- FindClusters(multi.Rawlins, graph.name = "wsnn", algorithm = 3, verbose = FALSE)
+# saveRDS(multi.Rawlins, "./RData/multi.Rawlins_5.rds")
+
+# obtained in local R due to version problem
+multi.Rawlins <- readRDS("/udd/reyqi/RData/multi.Rawlins_5.rds")
+
+# pdf(file = "./Plots/Dimplot_cluster.pdf", width = 12, height = 6)
+p1 <- DimPlot(multi.Rawlins, reduction = "umap.rna", label = TRUE, label.size = 2.5, repel = TRUE) + ggtitle("RNA")
+p2 <- DimPlot(multi.Rawlins, reduction = "umap.atac", label = TRUE, label.size = 2.5, repel = TRUE) + ggtitle("ATAC")
+p3 <- DimPlot(multi.Rawlins, reduction = "wnn.umap", label = TRUE, label.size = 2.5, repel = TRUE) + ggtitle("WNN")
+p1 + p2 & NoLegend() & theme(plot.title = element_text(hjust = 0.5))
+p3 & NoLegend() & theme(plot.title = element_text(hjust = 0.5))
+# dev.off()
+
+
+```
+
+Find Marker Genes
+
+``` {r marker, warning=FALSE}
+## Find Marker Genes for multi.Rawlins dataset
+DefaultAssay(multi.Rawlins) <- "RNA"
+# all.markers <- FindAllMarkers(object = multi.Rawlins)
+# saveRDS(all.markers, "./RData/all.markers.rds")
+all.markers <- readRDS("/udd/reyqi/RData/all.markers.rds")
+
+for (i in 0:19){
+  name <- paste("clusterMarker.", i, sep = "")
+  markers <- assign(name, dplyr::filter(all.markers, all.markers$cluster ==i))
+  write.table(markers, file  = paste0("/udd/reyqi/COPD/Results/Cluster",i,"_Marker.txt"), sep = "\t")
+}
+
+## Pathway and Gene Ontology (GO) Enrichment Analysis
+# pdf(file = "../Plots/AllClusters_GOplot_BP.pdf", width = 12, height = 10)
+for (i in 0:19) {
+  fileName <- paste0("/udd/reyqi/COPD/Results/Cluster", i, "_Marker.txt")
+  df <- read.table(fileName, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+  geneList <- df$gene
+  # Perform enrichGO analysis
+  enrichResult <- enrichGO(gene          = geneList,
+                           OrgDb         = org.Hs.eg.db,
+                           keyType       = 'SYMBOL',
+                           ont           = "BP", # For Biological Processes
+                           pAdjustMethod = "BH",
+                           pvalueCutoff  = 0.01,
+                           qvalueCutoff  = 0.05)
+  # Prepare data for plotting
+  top10BP <- enrichResult@result %>%
+    mutate(LOG10 = -log10(p.adjust)) %>%
+    arrange(desc(LOG10)) %>%
+    slice(1:20)
+  
+  p <- ggplot(top10BP, aes(x=LOG10, y=reorder(Description, LOG10), fill=LOG10)) +
+    geom_bar(stat = "identity") +
+    scale_fill_gradient(name = "-log(P-value)", low="#0066CC", high="#F8766D") +
+    labs(title=paste("Cluster", i, "Top 10 Biological Processes"),
+         x = "", y = "") +
+    theme_classic() +
+    theme(axis.text.x=element_text(angle=45, hjust=1))
+  print(p)
+}
+# barplot(enrichResult, showCategory=20
+# dev.off()
+```
+
+## Linking peaks to genes
+
+``` {r marker, warning=FALSE}
+
+DefaultAssay(multi.Rawlins) <- "RNA"
+multi.Rawlins <- SCTransform(multi.Rawlins)
+
+DefaultAssay(multi.Rawlins) <- "ATAC"
+multi.Rawlins <- RegionStats(multi.Rawlins, genome = BSgenome.Hsapiens.UCSC.hg38)
+
+# link peaks to genes
+multi.Rawlins <- LinkPeaks(
+  object = multi.Rawlins,
+  peak.assay = "ATAC",
+  expression.assay = "SCT",
+  genes.use = c("SOX9", "ASCL1"))
+
+# from local cuz no BSgenome package
+multi.Rawlins <- readRDS("/udd/reyqi/RData/multi.Rawlins_6.rds")
+
+# idents.plot <- c("2", "18", "15", "11", "14", "10", "0", "13")
+# idents.plot <- c(2, 18, 15, 11, 14, 10, 0, 13)
+
+p1 <- CoveragePlot(object = multi.Rawlins,
+  region = "SOX9",
+  features = "SOX9",
+  expression.assay = "SCT",
+  extend.upstream = 500,
+  extend.downstream = 10000)
+p2 <- CoveragePlot(object = multi.Rawlins,
+  region = "ASCL1",
+  features = "ASCL1",
+  expression.assay = "SCT",
+  extend.upstream = 8000,
+  extend.downstream = 5000)
+
+# pdf(file = "./Plots/peakgeneLink.pdf", width = 15, height = 10)
+patchwork::wrap_plots(p1, p2, ncol = 1)
+# dev.off()
+
+# saveRDS(multi.Rawlins, "../ATAC/multi.Rawlins_7.rds")
+multi.Rawlins <- readRDS("/udd/reyqi/RData/ATAC/multi.Rawlins_7.rds")
+
+# Apr 15, 2024 END
+
+```
+
+
